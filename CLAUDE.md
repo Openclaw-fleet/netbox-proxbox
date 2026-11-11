@@ -219,29 +219,9 @@ Removing an inherited environment value cannot erase the original process
 environment from `/proc/<pid>/environ`. The bootstrap must remain non-consuming
 and must not be treated as a security gate.
 
-The Django compatibility matrix has eight independent jobs: five base NetBox
-versions, the PDM registry override, the NetBox 4.7 all-companion configuration,
-and the NetBox 4.7 OpenBao configuration. Keep the original `profile: [base]`
-axis and distinct `all-companions` and `openbao` profile values. Matching
-`include` entries merge into original GitHub matrix combinations; removing
-this discriminator collapses the companion contracts and selects the wrong
-hash lock. Keep each profile paired with its reviewed dependency lock.
+The public Django compatibility matrix has seven independent jobs: five base NetBox versions, the PDM registry override, and the NetBox 4.7 OpenBao configuration. Keep `profile: [base]` and the distinct `openbao` profile; GitHub merges matching `include` entries, so removing the discriminator selects the wrong dependency lock. Keep each profile paired with its reviewed hash lock and verify public companion commits and pyproject digests.
 
-The Django workflow includes one immutable NetBox 4.7 cell that installs and
-registers netbox-proxbox together with netbox-ceph, netbox-pbs, netbox-pdm, and
-netbox-packer. Keep every companion checkout pinned by commit, verified by HEAD
-and pyproject digest, resolved from the reviewed hash-locked input, and covered
-by the post-migration registry and system-check assertions. This GitHub evidence
-does not replace a required Gitea pre-merge gate.
-
-The private PBS companion checkout requires the GitHub repository secret
-`COMPANION_READ_SSH_KEY`. Register its public key as a read-only deploy key
-for `emersonfelipesp/netbox-pbs` only and store its private key securely in
-the encrypted Actions secret. Supply it only to the
-conditional PBS credential diagnostic and checkout. Keep
-`persist-credentials: false`; never expose this credential to test processes,
-other checkouts, command text, logs, or artifacts. A missing credential must
-fail clearly without removing the pinned companion or its matrix coverage.
+Public CI uses synthetic fixtures and public dependencies only. Do not add a private companion checkout key or private inventory to this fork. Combined private-companion integration and private inventory replay are separate operator-run local or disposable-host gates; public matrix success does not establish those results or replace a required Gitea pre-merge gate. See `docs/developer/ci-e2e-workflows.md` for the workflow map.
 
 The workflow also includes an immutable NetBox 4.7 OpenBao cell. Keep its
 netbox-openbao and netbox-rpc source commits, pyproject digests, composed input,
@@ -480,5 +460,5 @@ The E2E mock uses the public native FastAPI factory described in
 collector or service identity, SDK-disabled application signals, selected
 caller provider ownership, scoped privacy, and excluded nested-context
 normal/error regressions. Install the E2E extra for the mocked suite and retain
-all eight exact real-Django dependency profiles. Local observer provider
+all seven exact public real-Django dependency profiles. Local observer provider
 shutdown is not the application's shipping lifespan ownership contract.

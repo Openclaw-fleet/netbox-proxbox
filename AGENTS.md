@@ -15,10 +15,7 @@ facts that an agent must have even when `@CLAUDE.md` expansion is unavailable:
 
 - Keep changes inside the canonical Emerson repository. Never target EdgeUno.
 - Preserve the public boundary and run `python scripts/check_public_boundary.py`.
-- The private PBS matrix checkout uses `COMPANION_READ_SSH_KEY`, an encrypted
-  Actions secret containing a read-only deploy key for
-  `emersonfelipesp/netbox-pbs` only. Keep credential persistence disabled and
-  keep the private key out of tests, logs, and artifacts.
+- Public CI uses synthetic fixtures and public dependencies only. Keep private companion keys and inventory out of this fork; run private integration/replay as separate local or disposable-host gates.
 - Scan built wheel and source archives with `--artifact`; the reviewed manifest
   covers name, domain, URL, command, path, package, service, distribution,
   workspace, retired contract, and private host identifiers; inspection
@@ -327,20 +324,7 @@ Removing an inherited environment value cannot erase the original process
 environment from `/proc/<pid>/environ`. The bootstrap must remain non-consuming
 and must not be treated as a security gate.
 
-The Django compatibility matrix has eight independent jobs: five base NetBox
-versions, the PDM registry override, the NetBox 4.7 all-companion configuration,
-and the NetBox 4.7 OpenBao configuration. Keep the original `profile: [base]`
-axis and distinct `all-companions` and `openbao` profile values. Matching
-`include` entries merge into original GitHub matrix combinations; removing
-this discriminator collapses the companion contracts and selects the wrong
-hash lock. Keep each profile paired with its reviewed dependency lock.
-
-The Django workflow includes one immutable NetBox 4.7 cell that installs and
-registers netbox-proxbox together with netbox-ceph, netbox-pbs, netbox-pdm, and
-netbox-packer. Keep every companion checkout pinned by commit, verified by HEAD
-and pyproject digest, resolved from the reviewed hash-locked input, and covered
-by the post-migration registry and system-check assertions. This GitHub evidence
-does not replace a required Gitea pre-merge gate.
+The public Django compatibility matrix has seven independent jobs: five base NetBox versions, the PDM registry override, and the NetBox 4.7 OpenBao configuration. Keep `profile: [base]` and the distinct `openbao` profile; GitHub merges matching `include` entries, so removing the discriminator selects the wrong dependency lock. Keep each profile paired with its reviewed hash lock and verify public companion commits and pyproject digests. Public matrix success does not establish combined private-companion integration or private replay, nor replace a required Gitea pre-merge gate. The workflow map is `docs/developer/ci-e2e-workflows.md`.
 
 ## Real-NetBox migration test compatibility
 
@@ -385,7 +369,7 @@ The E2E mock uses the public native FastAPI factory described in
 collector or service identity, SDK-disabled application signals, selected
 caller provider ownership, scoped privacy, and excluded nested-context
 normal/error regressions. Install the E2E extra for the mocked suite and retain
-all eight exact real-Django dependency profiles. Local observer provider
+all seven exact public real-Django dependency profiles. Local observer provider
 shutdown is not the application's shipping lifespan ownership contract.
 
 Native automatic telemetry setup requires `FASTAPI_OTEL_AUTO_CONFIGURE=true` (case-insensitive)

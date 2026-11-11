@@ -61,11 +61,7 @@ monitoring scheduling; token-pair repairs; original-store preservation after
 clears; actor propagation; and missing-address form errors. These caller tests
 complement helper coverage and must remain in the native Django lane.
 
-Native encryption-recovery fixtures must cover both optional PBS registry states
-even in the all-companions profile: simulate an absent app through the registry,
-use the migrated companion-owned settings row when enabled, and use an isolated
-disposable dormant-table fixture when absent. Create and drop that table only
-when the test owns it; never replace or drop an existing companion table.
+Native encryption-recovery fixtures cover the absent PBS registry state in public CI with an isolated disposable dormant-table fixture. Separate private-companion integration also covers the enabled registry state using its migrated settings row. Create and drop a dormant table only when the test owns it; never replace or drop an existing companion table or add private companion credentials to public CI.
 System-check tests require database access because enabled companions may query
 their models.
 
@@ -370,12 +366,7 @@ endpoints without requiring an OpenBao deployment for tenant behavior.
   template engine and proves operator-supplied user data is escaped. Keep it
   enumerated in `.github/workflows/django-tests.yml`; a mocked-suite skip is
   not execution evidence.
-- `test_version.py` pins the combined NetBox 4.7 companion cell: immutable
-  netbox-ceph, netbox-pbs, netbox-pdm, and netbox-packer sources; checked-out
-  HEADs and reviewed pyproject digests; the composed hash-locked dependency
-  artifact; editable no-dependency installation; and post-migration assertions
-  that NetBox registers all five plugins without plugin system-check warnings.
-  Do not replace this with import-only coverage or a mutable branch checkout.
+- `test_version.py` pins the seven-job public Django matrix, including the immutable PDM and OpenBao/RPC sources, reviewed dependency locks, checkout verification and post-migration registry checks. It rejects private companion checkout credentials in the public workflow. Combined private-companion integration and inventory replay remain separate local or disposable-host gates, not claims made by public CI.
 - `test_services_sync_datacenter.py`: behavior tests for `sync_datacenter` scoping against a stubbed module loader (mirroring the `sync_firewall` harness): a CPU-model response row for an endpoint outside the run's resolved scope is refused — neither upserted nor included in stale marking — pinning the local half of the endpoint scope that query-param forwarding cannot enforce against a backend that ignores `proxmox_endpoint_ids`. Also pins that a cluster name claimed by two endpoints resolves to nobody (`_resolve_endpoint_by_cluster_name` returns `None` instead of `.first()`-guessing), the same rule the firewall harness pins on its side together with the single-claimant case still resolving.
 - `test_services_backend_context.py`: AST contract for `get_fastapi_request_context` / `get_fastapi_endpoint_with_token` signatures and the three endpoint-resolution branches in `services/backend_context.py`.
 - `test_views_vm_config.py`: AST contract for `ProxmoxVMConfigTabView` — `register_model_view` path/name, `ObjectView` base, `ViewTab` label/permission, and the helper extractors.
