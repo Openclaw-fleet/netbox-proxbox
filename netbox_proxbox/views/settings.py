@@ -118,6 +118,9 @@ class SettingsView(
             "ignore_ipv6_link_local_addresses": settings_obj.ignore_ipv6_link_local_addresses,
             "ensure_netbox_objects": settings_obj.ensure_netbox_objects,
             "delete_orphans": settings_obj.delete_orphans,
+            "orphan_retirement_rules": getattr(
+                settings_obj, "orphan_retirement_rules", None
+            ),
             "primary_ip_preference": settings_obj.primary_ip_preference,
             "netbox_max_concurrent": settings_obj.netbox_max_concurrent,
             "netbox_timeout": settings_obj.netbox_timeout,
@@ -312,6 +315,9 @@ class SettingsView(
                 "ensure_netbox_objects", True
             )
             settings_obj.delete_orphans = form.cleaned_data.get("delete_orphans", False)
+            settings_obj.orphan_retirement_rules = form.cleaned_data.get(
+                "orphan_retirement_rules"
+            )
             settings_obj.primary_ip_preference = form.cleaned_data[
                 "primary_ip_preference"
             ]
@@ -549,6 +555,7 @@ def _save_settings(settings_obj: ProxboxPluginSettings) -> None:
             "ignore_ipv6_link_local_addresses",
             "ensure_netbox_objects",
             "delete_orphans",
+            "orphan_retirement_rules",
             "primary_ip_preference",
             "netbox_max_concurrent",
             "netbox_timeout",

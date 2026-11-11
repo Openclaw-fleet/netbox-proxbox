@@ -39,7 +39,10 @@ from netbox_proxbox.models.plugin_settings import (
     NETBOX_TO_PROXMOX_TYPED_PHRASE,
     RECONCILIATION_ENGINE_CHOICES,
 )
-from netbox_proxbox.validators import validate_global_node_device_name_template
+from netbox_proxbox.validators import (
+    validate_global_node_device_name_template,
+    validate_orphan_retirement_rules,
+)
 
 
 def _sync_mode_choice_options(
@@ -213,6 +216,18 @@ class ProxboxPluginSettingsForm(BootstrapCheckboxFormMixin, forms.Form):
             "that were not touched by the current sync run. Review the full-update "
             "dry-run preview before enabling in production."
         ),
+    )
+    orphan_retirement_rules = forms.JSONField(
+        required=False,
+        validators=[validate_orphan_retirement_rules],
+        label="Orphan retirement rules",
+        help_text=(
+            "Null/blank preserves legacy behavior. [] reports only. Otherwise use "
+            '[{"site_id": 901, "status": "offline", "tag_id": 902}]. '
+            "Unlisted sites report only; tag IDs must already exist. "
+            "Use only with a backend supporting site-scoped retirement rules."
+        ),
+        widget=forms.Textarea(attrs={"rows": 4}),
     )
     primary_ip_preference = forms.ChoiceField(
         required=True,

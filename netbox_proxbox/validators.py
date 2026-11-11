@@ -188,3 +188,31 @@ def validate_global_node_device_name_template(template: str) -> None:
         for endpoint_name in endpoint_names
     )
     validate_node_device_name_inventory(template, chain(sentinels, node_rows))
+
+
+def validate_orphan_retirement_rules(value: object) -> None:
+    """Validate an explicit site allowlist; null preserves legacy behavior."""
+    if value is None:
+        return
+    if not isinstance(value, list) or len(value) > 1024:
+        raise ValidationError(
+            _("Retirement rules must be a list of at most 1024 objects.")
+        )
+    seen = set()
+    for rule in value:
+        if not isinstance(rule, dict) or set(rule) - {"site_id", "status", "tag_id"}:
+            raise ValidationError(_("Unknown or malformed retirement rule."))
+        site_id = rule.get("site_id")
+        if type(site_id) is not int or site_id <= 0 or site_id in seen:
+            raise ValidationError(
+                _("Retirement site IDs must be unique positive integers.")
+            )
+        seen.add(site_id)
+        status = rule.get("status")
+        if status not in ("report_only", "offline", "decommissioning"):
+            raise ValidationError(_("Invalid retirement status."))
+        tag_id = rule.get("tag_id")
+        if "tag_id" in rule and (type(tag_id) is not int or tag_id <= 0):
+            raise ValidationError(_("Retirement tag IDs must be positive integers."))
+        if status == "report_only" and "tag_id" in rule:
+            raise ValidationError(_("Report-only rules cannot assign a tag."))
