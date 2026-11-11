@@ -24,6 +24,7 @@ except Exception:
         raise
     pytest.skip("Real NetBox/Django test environment required", allow_module_level=True)
 
+from django import forms  # noqa: E402
 from django.core.exceptions import ValidationError  # noqa: E402
 from django.test import TestCase  # noqa: E402
 from rest_framework.exceptions import ValidationError as APIValidationError  # noqa: E402
@@ -36,6 +37,64 @@ from tests.django_support import make_user  # noqa: E402
 
 
 class RetirementRulesTest(TestCase):
+    def test_empty_object_is_rejected_at_model_form_and_api_boundaries(self):
+        row = ProxboxPluginSettings.get_solo()
+        row.orphan_retirement_rules = {}
+        with self.subTest(boundary="model"):
+            with self.assertRaises(ValidationError) as error:
+                row.full_clean()
+            self.assertIn("orphan_retirement_rules", error.exception.message_dict)
+        with self.subTest(boundary="form"):
+            form = ProxboxPluginSettingsForm(data={"orphan_retirement_rules": "{}"})
+            form.full_clean()
+            self.assertIn("orphan_retirement_rules", form.errors)
+        with self.subTest(boundary="api"):
+            client = APIClient()
+            client.force_authenticate(
+                user=make_user("retirement-validation", is_superuser=True)
+            )
+            response = client.patch(
+                f"/api/plugins/proxbox/settings/{row.pk}/",
+                {"orphan_retirement_rules": {}},
+                format="json",
+            )
+            self.assertEqual(response.status_code, 400, response.data)
+
+    def test_settings_form_distinguishes_omitted_and_explicit_policy(self):
+        row = ProxboxPluginSettings.get_solo()
+        self.client.force_login(make_user("retirement-form", is_superuser=True))
+        url = "/plugins/proxbox/settings/"
+        for policy in ([], [{"site_id": 901, "status": "offline"}]):
+            row.orphan_retirement_rules = policy
+            row.save()
+            response = self.client.get(url)
+            self.assertEqual(response.status_code, 200)
+            payload = {}
+            for bound in response.context["form"]:
+                value = bound.value()
+                if isinstance(bound.field, forms.BooleanField):
+                    if value:
+                        payload[bound.name] = "on"
+                elif isinstance(bound.field, forms.JSONField):
+                    payload[bound.name] = json.dumps(value)
+                elif value is not None:
+                    payload[bound.name] = value
+            payload.pop("orphan_retirement_rules")
+            with self.subTest(policy=policy, submission="omitted"):
+                response = self.client.post(url, payload)
+                self.assertEqual(response.status_code, 302)
+                row.refresh_from_db()
+                self.assertEqual(row.orphan_retirement_rules, policy)
+            for explicit in ("null", "[]", ""):
+                with self.subTest(policy=policy, submission=explicit):
+                    payload["orphan_retirement_rules"] = explicit
+                    response = self.client.post(url, payload)
+                    self.assertEqual(response.status_code, 302)
+                    row.refresh_from_db()
+                    self.assertEqual(
+                        row.orphan_retirement_rules, [] if explicit == "[]" else None
+                    )
+
     def test_model_form_and_api_reject_ambiguous_rules(self):
         model_field = ProxboxPluginSettings._meta.get_field("orphan_retirement_rules")
         form_field = ProxboxPluginSettingsForm().fields["orphan_retirement_rules"]

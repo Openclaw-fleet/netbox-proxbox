@@ -977,6 +977,12 @@ class ProxboxPluginSettingsForm(BootstrapCheckboxFormMixin, forms.Form):
             )
         return path
 
+    def clean_orphan_retirement_rules(self) -> object:
+        """Validate empty JSON objects even when field validators skip them."""
+        value = self.cleaned_data.get("orphan_retirement_rules")
+        validate_orphan_retirement_rules(value)
+        return value
+
     def clean(self) -> dict:
         """Cross-field validation for timing and intent-direction fields."""
         super().clean()

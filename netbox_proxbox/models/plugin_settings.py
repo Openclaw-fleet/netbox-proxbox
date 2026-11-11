@@ -1050,9 +1050,14 @@ class ProxboxPluginSettings(NetBoxModel):
         return "Proxbox plugin settings"
 
     def clean(self) -> None:
-        """Reject timing combinations that cannot perform another status poll."""
+        """Validate retirement policy and reject unusable polling intervals."""
 
         super().clean()
+        # Django skips field validators for blank JSON values, including {}.
+        try:
+            validate_orphan_retirement_rules(self.orphan_retirement_rules)
+        except ValidationError as exc:
+            raise ValidationError({"orphan_retirement_rules": exc.messages}) from exc
         timeout = self.ceph_task_timeout
         poll_interval = self.ceph_task_poll_interval
         if timeout is None or poll_interval is None:

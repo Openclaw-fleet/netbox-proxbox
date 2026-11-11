@@ -315,9 +315,10 @@ class SettingsView(
                 "ensure_netbox_objects", True
             )
             settings_obj.delete_orphans = form.cleaned_data.get("delete_orphans", False)
-            settings_obj.orphan_retirement_rules = form.cleaned_data.get(
-                "orphan_retirement_rules"
-            )
+            if "orphan_retirement_rules" in request.POST:
+                settings_obj.orphan_retirement_rules = form.cleaned_data.get(
+                    "orphan_retirement_rules"
+                )
             settings_obj.primary_ip_preference = form.cleaned_data[
                 "primary_ip_preference"
             ]
