@@ -762,6 +762,7 @@ def parser_module(monkeypatch):
             pass
 
     forms_mod.CharField = _Field
+    forms_mod.JSONField = _Field
     forms_mod.SlugField = _Field
     forms_mod.BooleanField = _Field
     forms_mod.IntegerField = _Field
@@ -879,6 +880,7 @@ def parser_module(monkeypatch):
     validators_mod = types.ModuleType("netbox_proxbox.validators")
     validators_mod.validate_global_node_device_name_template = lambda value: value
     validators_mod.validate_node_device_name_template = lambda value: value
+    validators_mod.validate_orphan_retirement_rules = lambda value: value
     monkeypatch.setitem(sys.modules, "netbox_proxbox.validators", validators_mod)
 
     pkg = types.ModuleType("netbox_proxbox")
