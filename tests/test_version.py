@@ -238,27 +238,6 @@ DJANGO_TESTED_NETBOX_ROWS = (
     {
         "netbox": "v4.7.0",
         "pdm": False,
-        "profile": "all-companions",
-        "all_companions": True,
-        "netbox_ref": "5f06007e4c9bacc93ce17c1e645fc1143d60df3d",
-        "netbox_version": "4.7.0",
-        "netbox_designation": "",
-        "netbox_requirements_sha256": (
-            "61589a94b25149765d230d3f33597326c3987faae7cbc20aae4c49e825c2b582"
-        ),
-        "netbox_input_sha256": "2cbc54404b9e1e0a700c416077069c79f2220005b977111da9da8d13b5a6e688",
-        "netbox_lock": "ci/netbox-requirements/v4.7.0-all-companions-py312-linux-x86_64.txt",
-        "netbox_lock_sha256": (
-            "e2f5e25817aa3cf3548e8a7a17cd8ae5ccbda2da466452aac07b38ff01b78177"
-        ),
-        "pdm_ref": "c96b425b69677107635749860e240576e91041ee",
-        "ceph_ref": "227f386148219522476423a85156a72ab215ece5",
-        "pbs_ref": "e00bdcab5fa519f6a2cd22d51fc329e0623af746",
-        "packer_ref": "31f9ddf9652dbbbb9b34b83604acd888228caae7",
-    },
-    {
-        "netbox": "v4.7.0",
-        "pdm": False,
         "profile": "openbao",
         "openbao": True,
         "netbox_ref": "5f06007e4c9bacc93ce17c1e645fc1143d60df3d",
@@ -302,91 +281,6 @@ def _class_constants(class_name: str) -> dict[str, str]:
 
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
-
-
-def _combined_companion_triples(workflow: str) -> dict[str, tuple[str, str]]:
-    """Return repository -> (immutable ref, pyproject digest) from the workflow."""
-    parsed = yaml.safe_load(workflow)
-    job = parsed["jobs"]["django-tests"]
-    [combined_row] = [
-        row for row in job["strategy"]["matrix"]["include"] if row.get("all_companions")
-    ]
-    ref_keys = {
-        "emersonfelipesp/netbox-pdm": "pdm_ref",
-        "emersonfelipesp/netbox-ceph": "ceph_ref",
-        "emersonfelipesp/netbox-pbs": "pbs_ref",
-        "emersonfelipesp/netbox-packer": "packer_ref",
-    }
-    [verify_step] = [
-        step
-        for step in job["steps"]
-        if step.get("name") == "Verify exact NetBox source identity"
-    ]
-    digest_matches = re.findall(
-        r"printf '%s  %s\\n' ([0-9a-f]{64}) \\\n\s+"
-        r"(netbox-(?:pdm|ceph|pbs|packer)/pyproject\.toml)",
-        verify_step["run"],
-    )
-    digests = {
-        path.removesuffix("/pyproject.toml"): digest for digest, path in digest_matches
-    }
-    return {
-        repository: (combined_row[ref_key], digests[repository.partition("/")[2]])
-        for repository, ref_key in ref_keys.items()
-    }
-
-
-def _combined_registry_oracle_is_intact(source: str) -> bool:
-    python_source = source[source.index("from django.apps import apps") :]
-    tree = ast.parse(python_source.removesuffix("'\n"))
-    installed_assignments = _named_assignments(tree, "installed")
-    message_assignments = _named_assignments(tree, "plugin_messages")
-    subset_asserts = _matching_asserts(tree, "expected <= installed")
-    message_asserts = _matching_asserts(tree, "plugin_messages == []")
-    if not all(
-        len(nodes) == 1
-        for nodes in (
-            installed_assignments,
-            message_assignments,
-            subset_asserts,
-            message_asserts,
-        )
-    ):
-        return False
-    expected_messages = ast.parse(
-        "[message for message in run_checks() "
-        'if str(getattr(message, "id", "")).partition(".")[0] in expected]',
-        mode="eval",
-    ).body
-    return (
-        ast.dump(installed_assignments[0].value)
-        == ast.dump(
-            ast.parse('set(registry["plugins"]["installed"])', mode="eval").body
-        )
-        and ast.dump(message_assignments[0].value) == ast.dump(expected_messages)
-        and installed_assignments[0].lineno < subset_asserts[0].lineno
-        and message_assignments[0].lineno < message_asserts[0].lineno
-    )
-
-
-def _named_assignments(tree: ast.Module, name: str) -> list[ast.Assign]:
-    return [
-        node
-        for node in tree.body
-        if isinstance(node, ast.Assign)
-        and len(node.targets) == 1
-        and isinstance(node.targets[0], ast.Name)
-        and node.targets[0].id == name
-    ]
-
-
-def _matching_asserts(tree: ast.Module, expression: str) -> list[ast.Assert]:
-    expected = ast.dump(ast.parse(expression, mode="eval").body)
-    return [
-        node
-        for node in tree.body
-        if isinstance(node, ast.Assert) and ast.dump(node.test) == expected
-    ]
 
 
 def _assert_markdown_table_row(text: str, expected_cells: tuple[str, ...]) -> None:
@@ -728,10 +622,12 @@ def test_all_companions_input_and_lock_pin_reviewed_runtime_metadata():
     }
     for fragment in expected_fragments:
         assert fragment in companion_input
-    [combined_row] = [
-        row for row in DJANGO_TESTED_NETBOX_ROWS if row.get("all_companions")
-    ]
-    combined_lock = _read(REPO_ROOT / combined_row["netbox_lock"])
+    # Retain the reviewed lock as historical/local compatibility input, not
+    # as evidence that public CI can fetch a private companion repository.
+    combined_lock = _read(
+        REPO_ROOT
+        / "ci/netbox-requirements/v4.7.0-all-companions-py312-linux-x86_64.txt"
+    )
     for package in ("proxmox-sdk==", "setuptools==", "wheel=="):
         assert package in combined_lock
 
@@ -756,7 +652,7 @@ def test_django_tests_pin_reviewed_execution_inputs():
         workflow.count(
             "uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803"
         )
-        == 8
+        == 5
     )
     assert (
         "uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1"
@@ -780,7 +676,7 @@ def test_django_tests_use_read_only_nonpersistent_checkout_credentials():
         for step in parsed["jobs"]["django-tests"]["steps"]
         if str(step.get("uses", "")).startswith("actions/checkout@")
     ]
-    assert len(checkout_steps) == 8
+    assert len(checkout_steps) == 5
     assert all(step["with"]["persist-credentials"] is False for step in checkout_steps)
 
 
@@ -848,25 +744,14 @@ def test_django_tests_enforce_one_hashed_resolution_and_metadata_check():
     assert "--default-index https://pypi.org/simple" in workflow
     assert "--index-strategy first-index" in workflow
     assert '-r "${{ matrix.netbox_lock }}"' in workflow
-    assert workflow.count("--no-build-isolation --no-deps") == 5
+    assert workflow.count("--no-build-isolation --no-deps") == 4
     assert "uv pip check --python .venv/bin/python" in workflow
     assert "../netbox/requirements.txt" not in workflow
 
 
-def test_django_tests_pin_combined_companion_checkouts():
+def test_django_tests_pin_public_companion_checkouts():
     workflow = _read(DJANGO_TESTS_WORKFLOW_PATH)
     parsed = yaml.safe_load(workflow)
-    matrix_rows = parsed["jobs"]["django-tests"]["strategy"]["matrix"]["include"]
-    [combined_row] = [row for row in matrix_rows if row.get("all_companions")]
-    assert {
-        key: combined_row[key]
-        for key in ("pdm_ref", "ceph_ref", "pbs_ref", "packer_ref")
-    } == {
-        "pdm_ref": "c96b425b69677107635749860e240576e91041ee",
-        "ceph_ref": "227f386148219522476423a85156a72ab215ece5",
-        "pbs_ref": "e00bdcab5fa519f6a2cd22d51fc329e0623af746",
-        "packer_ref": "31f9ddf9652dbbbb9b34b83604acd888228caae7",
-    }
     steps = parsed["jobs"]["django-tests"]["steps"]
     checkout_steps = {
         step["with"]["repository"]: step["with"]
@@ -874,125 +759,22 @@ def test_django_tests_pin_combined_companion_checkouts():
         if step.get("name", "").startswith("Checkout supported")
     }
     assert checkout_steps["emersonfelipesp/netbox-pdm"]["ref"] == (
-        "${{ matrix.all_companions && matrix.pdm_ref || "
-        "'3408441672bf849dfaf953d96d6e0ba1561cd576' }}"
+        "3408441672bf849dfaf953d96d6e0ba1561cd576"
     )
-    for repository, ref_name in (
-        ("emersonfelipesp/netbox-ceph", "ceph_ref"),
-        ("emersonfelipesp/netbox-pbs", "pbs_ref"),
-        ("emersonfelipesp/netbox-packer", "packer_ref"),
-    ):
-        assert checkout_steps[repository]["ref"] == f"${{{{ matrix.{ref_name} }}}}"
+    assert (
+        checkout_steps["emersonfelipesp/netbox-openbao"]["ref"]
+        == "${{ matrix.openbao_ref }}"
+    )
+    assert checkout_steps["N-MultiCloud/netbox-rpc"]["ref"] == "${{ matrix.rpc_ref }}"
     assert all(step["persist-credentials"] is False for step in checkout_steps.values())
-
-
-def test_django_tests_bind_companion_repositories_refs_and_pyproject_digests():
-    workflow = _read(DJANGO_TESTS_WORKFLOW_PATH)
-    expected = {
-        "emersonfelipesp/netbox-pdm": (
-            "c96b425b69677107635749860e240576e91041ee",
-            "bf9ff5877ba6a3257d01804b78128510ada750e70aa344316dbf181b71c00b46",
-        ),
-        "emersonfelipesp/netbox-ceph": (
-            "227f386148219522476423a85156a72ab215ece5",
-            "407633d87cc6fc096d0a3824e2eaa9efd4ceda7486f70b2b65197c30450e82d9",
-        ),
-        "emersonfelipesp/netbox-pbs": (
-            "e00bdcab5fa519f6a2cd22d51fc329e0623af746",
-            "da206270a647fe3bb5a26e3cb1136e39d7344bef8375a5fb20e11637ff318e7e",
-        ),
-        "emersonfelipesp/netbox-packer": (
-            "31f9ddf9652dbbbb9b34b83604acd888228caae7",
-            "5f1b95feee604e4f617bffa0bb6efa548c3f12e02b28c57902754f599ab964fe",
-        ),
-    }
-    assert _combined_companion_triples(workflow) == expected
-    for repository, (_, digest) in expected.items():
-        mutated = workflow.replace(digest, "0" * 64)
-        assert _combined_companion_triples(mutated)[repository] != expected[repository]
-
-
-def test_django_tests_pin_combined_companion_registry_contract():
-    parsed = yaml.safe_load(_read(DJANGO_TESTS_WORKFLOW_PATH))
-    steps = parsed["jobs"]["django-tests"]["steps"]
-    [registry_step] = [
-        step
-        for step in steps
-        if step.get("name") == "Prove the combined NetBox 4.7 companion registry"
-    ]
-    assert registry_step["if"] == "matrix.all_companions"
-    for plugin in (
-        "netbox_proxbox",
-        "netbox_ceph",
-        "netbox_pbs",
-        "netbox_pdm",
-        "netbox_packer",
-    ):
-        assert plugin in registry_step["run"]
-    oracle = registry_step["run"]
-    assert "apps.is_installed(plugin)" in oracle
-    assert _combined_registry_oracle_is_intact(oracle)
-    assert 'NETBOX_PROXBOX_TEST_ALL_COMPANIONS: "1"' in _read(
-        DJANGO_TESTS_WORKFLOW_PATH
-    )
-
-
-def test_django_tests_reject_mutated_combined_registry_oracle():
-    parsed = yaml.safe_load(_read(DJANGO_TESTS_WORKFLOW_PATH))
-    [registry_step] = [
-        step
-        for step in parsed["jobs"]["django-tests"]["steps"]
-        if step.get("name") == "Prove the combined NetBox 4.7 companion registry"
-    ]
-    oracle = registry_step["run"]
-    mutations = (
-        oracle.replace(
-            "message for message in run_checks()", "message for message in []"
-        ),
-        oracle.replace("[0] in expected", "[0] not in expected"),
-        oracle.replace("expected <= installed", "installed <= expected"),
-        oracle.replace("plugin_messages == []", "plugin_messages != []"),
-        oracle.replace("assert expected <= installed, (expected, installed)\n", ""),
-    )
-    assert all(not _combined_registry_oracle_is_intact(mutant) for mutant in mutations)
-
-
-def test_django_tests_reject_plugin_messages_shadow_assignment():
-    workflow = _read(DJANGO_TESTS_WORKFLOW_PATH)
-    oracle = next(
-        step["run"]
-        for step in yaml.safe_load(workflow)["jobs"]["django-tests"]["steps"]
-        if step.get("name") == "Prove the combined NetBox 4.7 companion registry"
-    )
-    mutant = oracle.replace(
-        "assert plugin_messages == [], plugin_messages",
-        "plugin_messages = []\nassert plugin_messages == [], plugin_messages",
-    )
-    assert not _combined_registry_oracle_is_intact(mutant)
-
-
-def test_django_tests_reject_installed_shadow_assignment():
-    workflow = _read(DJANGO_TESTS_WORKFLOW_PATH)
-    oracle = next(
-        step["run"]
-        for step in yaml.safe_load(workflow)["jobs"]["django-tests"]["steps"]
-        if step.get("name") == "Prove the combined NetBox 4.7 companion registry"
-    )
-    mutant = oracle.replace(
-        "assert expected <= installed, (expected, installed)",
-        "installed = set(expected)\nassert expected <= installed, (expected, installed)",
-    )
-    assert not _combined_registry_oracle_is_intact(mutant)
 
 
 def test_django_tests_verify_companion_heads_and_metadata():
     workflow = _read(DJANGO_TESTS_WORKFLOW_PATH)
-    assert 'git -C "$companion" rev-parse HEAD' in workflow
     for path in (
         "netbox-pdm/pyproject.toml",
-        "netbox-ceph/pyproject.toml",
-        "netbox-pbs/pyproject.toml",
-        "netbox-packer/pyproject.toml",
+        "netbox-openbao/pyproject.toml",
+        "netbox-rpc/pyproject.toml",
     ):
         assert path in workflow
 
@@ -1015,7 +797,6 @@ def test_django_tests_verify_composed_dependency_artifact_checksums():
             verify_env.get("EXPECTED_PROJECT_INPUT_SHA256"),
             verify_env.get("EXPECTED_PDM_INPUT_SHA256"),
             verify_env.get("EXPECTED_PDM_PYPROJECT_SHA256"),
-            verify_env.get("EXPECTED_ALL_COMPANIONS_INPUT_SHA256"),
             verify_env.get("EXPECTED_OPENBAO_INPUT_SHA256"),
         ),
         "consumption_counts": (
@@ -1034,8 +815,6 @@ def test_django_tests_verify_composed_dependency_artifact_checksums():
             '"$EXPECTED_PROJECT_INPUT_SHA256"' in verify_run,
             '"$EXPECTED_PDM_INPUT_SHA256"' in verify_run,
             '"$EXPECTED_PDM_PYPROJECT_SHA256" netbox-pdm/pyproject.toml' in verify_run,
-            '"$EXPECTED_ALL_COMPANIONS_INPUT_SHA256"' in verify_run,
-            "netbox-all-companions-py312.in" in verify_run,
             '"$EXPECTED_OPENBAO_INPUT_SHA256"' in verify_run,
             "netbox-openbao-58677ef-py312.in" in verify_run,
         ),
@@ -1048,13 +827,10 @@ def test_django_tests_verify_composed_dependency_artifact_checksums():
             "431e09b72b9bfcba6e4e3776bd49a8449425dea345677c60ea12e7e839ca8b6a",
             "424c8807691eaa50c53762e6b1dbddbbe4489fe0b2a9bd15d142acb17699d50e",
             "496d7924629f7aa98452d302a33ce9b47c1533079f4a4320b92ee8b18133cfce",
-            "7b277c8c7baf88778fac40258dca059212097e36dede04d1250f920a3ec7994b",
             "5c60d62b4e84eaff3350e37045edc8b208c3b28b144815772c7dda0b2f754d85",
         ),
-        "consumption_counts": (1, 1, 1, 14),
+        "consumption_counts": (1, 1, 1, 9),
         "targets_present": (
-            True,
-            True,
             True,
             True,
             True,

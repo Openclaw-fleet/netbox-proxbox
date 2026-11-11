@@ -16,6 +16,13 @@ the staged TestPyPI/PyPI release pipeline.
 | `.github/workflows/docs-screenshots.yml` | Manual dispatch | Refreshes committed UI screenshots used by the docs site. |
 | `.github/workflows/nightly-contracts.yml` | Schedule / manual dispatch | Checks cross-repo contracts that must stay aligned with `proxbox-api`. |
 
+The public Django matrix has seven jobs: five base releases, one PDM override,
+and one OpenBao profile. It uses synthetic fixtures and public dependencies
+only; it neither fetches the private PBS companion nor accepts a private
+checkout key. Combined private-companion integration is not covered here.
+Private inventory replay is a separate local or disposable-host gate: its
+inputs, credentials, and exports must never enter public CI or artifacts.
+
 The E2E Docker, page-coverage, documentation-screenshot, and release-validation
 defaults are aligned on proxbox-api `0.0.27.post4`. E2E uses the exact published image
 by default for workflow calls, pull requests, schedules, and manual dispatches;

@@ -124,8 +124,8 @@ def _step(job: dict[str, object], name: str) -> dict[str, object]:
 _GITHUB_MATRIX_META_KEYS = frozenset({"include", "exclude"})
 
 # Exact expanded identities for the NetBox Django matrix after GitHub applies
-# include using matching-original-combination merge semantics. Eight jobs:
-# five base versions, one PDM override, plus isolated all-companions/openbao.
+# include using matching-original-combination merge semantics. Seven public jobs:
+# five base versions, one PDM override, plus isolated OpenBao.
 _DJANGO_MATRIX_EXPECTED_LOCKS: dict[tuple[str, bool, str], str] = {
     ("v4.5.8", False, "base"): ("ci/netbox-requirements/v4.5.8-py312-linux-x86_64.txt"),
     ("v4.5.10", False, "base"): (
@@ -136,9 +136,6 @@ _DJANGO_MATRIX_EXPECTED_LOCKS: dict[tuple[str, bool, str], str] = {
     ("v4.7.0", False, "base"): ("ci/netbox-requirements/v4.7.0-py312-linux-x86_64.txt"),
     ("v4.6.6", True, "base"): (
         "ci/netbox-requirements/v4.6.6-pdm-3408441672bf-py312-linux-x86_64.txt"
-    ),
-    ("v4.7.0", False, "all-companions"): (
-        "ci/netbox-requirements/v4.7.0-all-companions-py312-linux-x86_64.txt"
     ),
     ("v4.7.0", False, "openbao"): (
         "ci/netbox-requirements/v4.7.0-openbao-58677ef-py312-linux-x86_64.txt"
@@ -238,22 +235,11 @@ def _django_combo_identity(
     return (str(combo["netbox"]), bool(combo["pdm"]), str(combo["profile"]))
 
 
-def _collapsed_companion_combos(
-    combinations: list[dict[str, object]],
-) -> list[dict[str, object]]:
-    return [
-        combo
-        for combo in combinations
-        if combo.get("all_companions") and combo.get("openbao")
-    ]
-
-
 def assert_django_matrix_isolated(
     combinations: list[dict[str, object]],
 ) -> dict[tuple[str, bool, str], str]:
-    """Require eight non-overlapping Django matrix contracts with exact locks."""
-    assert len(combinations) == 8, combinations
-    assert _collapsed_companion_combos(combinations) == []
+    """Require seven non-overlapping public matrix contracts with exact locks."""
+    assert len(combinations) == 7, combinations
     observed = {
         _django_combo_identity(combo): str(combo["netbox_lock"])
         for combo in combinations
@@ -2862,75 +2848,40 @@ def test_registry_not_found_is_distinguishable_from_every_other_failure() -> Non
                 ), f"HTTP {code} must not read as absence"
 
 
-def test_django_tests_private_pbs_checkout_uses_companion_read_ssh_key() -> None:
-    """The all_companions cell checks out private netbox-pbs with an explicit secret."""
+def test_public_django_tests_never_checkout_private_companions_or_keys() -> None:
+    """Public pull requests need neither private source nor reusable secrets."""
     parsed = yaml.safe_load(_read(DJANGO_TESTS_WORKFLOW))
     steps = parsed["jobs"]["django-tests"]["steps"]
-    names = [step.get("name") for step in steps if isinstance(step, dict)]
-
-    diagnostic = _step(
-        parsed["jobs"]["django-tests"],
-        "Verify COMPANION_READ_SSH_KEY for private PBS checkout",
-    )
-    assert diagnostic["if"] == "matrix.all_companions"
-    assert diagnostic["env"] == {
-        "COMPANION_READ_SSH_KEY": "${{ secrets.COMPANION_READ_SSH_KEY }}"
-    }
-    diagnostic_run = diagnostic["run"]
-    assert "COMPANION_READ_SSH_KEY" in diagnostic_run
-    assert "secrets.COMPANION_READ_SSH_KEY" not in diagnostic_run
-    assert "::error::" in diagnostic_run
-    assert "-z" in diagnostic_run
-
-    pbs = _step(parsed["jobs"]["django-tests"], "Checkout supported PBS companion")
-    assert pbs["if"] == "matrix.all_companions"
-    assert pbs["with"]["repository"] == "emersonfelipesp/netbox-pbs"
-    assert pbs["with"]["ref"] == "${{ matrix.pbs_ref }}"
-    assert pbs["with"]["ssh-key"] == "${{ secrets.COMPANION_READ_SSH_KEY }}"
-    assert pbs["with"]["persist-credentials"] is False
-
-    diagnostic_index = names.index(
-        "Verify COMPANION_READ_SSH_KEY for private PBS checkout"
-    )
-    pbs_index = names.index("Checkout supported PBS companion")
-    assert diagnostic_index < pbs_index
-
     companion_checkouts = [
         step
         for step in steps
         if isinstance(step, dict)
         and step.get("name", "").startswith("Checkout supported")
-        and step.get("with", {}).get("repository") != "emersonfelipesp/netbox-pbs"
     ]
+    assert {step["with"]["repository"] for step in companion_checkouts} == {
+        "emersonfelipesp/netbox-pdm",
+        "emersonfelipesp/netbox-openbao",
+        "N-MultiCloud/netbox-rpc",
+    }
     for step in companion_checkouts:
         assert "token" not in step.get("with", {})
         assert "ssh-key" not in step.get("with", {})
-
-    pytest_step = _step(
-        parsed["jobs"]["django-tests"],
-        "Run NetBox-backed model, view, and integration tests",
-    )
-    pytest_env = pytest_step.get("env", {})
-    assert "COMPANION_READ_SSH_KEY" not in pytest_env
     workflow_text = _read(DJANGO_TESTS_WORKFLOW)
-    assert workflow_text.count("secrets.COMPANION_READ_SSH_KEY") == 2
+    assert "secrets." not in workflow_text
+    assert "COMPANION_READ_SSH_KEY" not in workflow_text
+    assert "netbox-pbs" not in workflow_text
 
 
-def test_django_tests_matrix_expands_to_eight_isolated_profiles() -> None:
+def test_django_tests_matrix_expands_to_seven_isolated_public_profiles() -> None:
     """GitHub include merge must keep companion cells off the base v4.7.0 job."""
     matrix = _django_tests_matrix()
     assert matrix.get("profile") == ["base"]
     combinations = expand_github_matrix(matrix)
     assert_django_matrix_isolated(combinations)
 
-    [companions] = [
-        combo for combo in combinations if combo["profile"] == "all-companions"
-    ]
     [openbao] = [combo for combo in combinations if combo["profile"] == "openbao"]
-    assert companions.get("all_companions") is True
-    assert companions.get("openbao") is not True
     assert openbao.get("openbao") is True
-    assert openbao.get("all_companions") is not True
+    assert all(not combo.get("all_companions") for combo in combinations)
 
     job = yaml.safe_load(_read(DJANGO_TESTS_WORKFLOW))["jobs"]["django-tests"]
     assert "matrix.profile" in str(job["name"])
@@ -2943,14 +2894,11 @@ def test_django_tests_legacy_include_shape_collapses_companion_cells() -> None:
     combinations = expand_github_matrix(legacy)
     assert len(combinations) == 6
 
-    collapsed = _collapsed_companion_combos(combinations)
-    assert len(collapsed) == 1
-    cell = collapsed[0]
+    [cell] = [combo for combo in combinations if combo.get("openbao")]
     assert cell["netbox"] == "v4.7.0"
     assert cell["pdm"] is False
-    assert cell.get("all_companions") is True
     assert cell.get("openbao") is True
-    # Later matching include wins the lock; all-companions artifact is lost.
+    # The optional profile overwrites the base cell's reviewed dependency lock.
     assert cell["netbox_lock"] == (
         "ci/netbox-requirements/v4.7.0-openbao-58677ef-py312-linux-x86_64.txt"
     )
@@ -2968,12 +2916,6 @@ def test_django_tests_legacy_include_shape_collapses_companion_cells() -> None:
         ("v4.6.6", False, "base", "v4.6.6-py312-linux-x86_64.txt"),
         ("v4.7.0", False, "base", "v4.7.0-py312-linux-x86_64.txt"),
         ("v4.6.6", True, "base", "v4.6.6-pdm-3408441672bf-py312-linux-x86_64.txt"),
-        (
-            "v4.7.0",
-            False,
-            "all-companions",
-            "v4.7.0-all-companions-py312-linux-x86_64.txt",
-        ),
         (
             "v4.7.0",
             False,
