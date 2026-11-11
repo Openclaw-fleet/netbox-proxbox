@@ -457,6 +457,7 @@ jobs:
           common_tests=(
             tests/test_netbox_compat_django.py
             tests/test_api_netbox_integration.py
+            tests/test_retirement_rules_django.py
             tests/test_list_view_render_django.py
             tests/test_django_database_reclamation_django.py
             tests/test_sync_state_models.py

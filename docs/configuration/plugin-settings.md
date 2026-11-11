@@ -38,8 +38,26 @@ shadows the field.
 | **Ignore IPv6 link-local addresses** | `true` | _(plugin only)_ | Skip `fe80::/64` addresses during VM interface IP selection. |
 | **Ensure NetBox supporting objects on startup** | `true` | _(plugin only)_ | When enabled, proxbox-api runs an idempotent NetBox-side bootstrap pass on each process start that ensures the supporting objects the plugin relies on, including cluster type, device roles, manufacturer, device type, VM type, and discovery tags. Disable to leave hand-curated NetBox installs untouched. |
 | **Mark orphan VMs for deletion** | `false` | `PROXBOX_DELETE_ORPHANS` | Mark Proxbox-discovered QEMU VMs and LXC containers that were not touched by the current full-update run with the `proxbox-soft-deleted` tag and `decommissioning` status. Synchronization never deletes the NetBox records. Review `/full-update/stream?dry_run=true` before enabling in production, then use the **Soft-deleted VMs** page for human-confirmed cleanup. |
+| **Orphan retirement rules** | `null` | _(plugin only)_ | Optional site allowlist. `null` retains legacy soft-decommissioning; `[]` reports only everywhere. Rules select `report_only`, `offline` or `decommissioning` per site and may name an existing additional tag ID. Unlisted sites report only. |
 | **Parse description metadata** | `false` | _(plugin only)_ | When enabled, proxbox-api reads each Proxmox object's description for a fenced `netbox-metadata` JSON block and applies the parsed primary-key ids to the matching NetBox fields. Per-field `overwrite_*` flags still gate keys they cover. |
 | **Primary IP preference** | `ipv4` | _(plugin only)_ | Whether the sync should prefer IPv4 or IPv6 when assigning primary IP on NetBox VMs. |
+
+### Site-scoped retirement
+
+Use this setting only with a backend that supports `orphan_retirement_rules`.
+Older backends ignore the field: keep `delete_orphans=false` throughout a mixed-version
+upgrade. An explicit allowlist, including `[]`, is recommended before enabling retirement.
+The migration deliberately leaves existing settings at `null` for compatibility.
+
+For example, `[{"site_id": 901, "status": "offline", "tag_id": 902}]` permits only
+site 901 to retire to offline and retain/add existing tag 902. All other sites remain
+report-only. These IDs are illustrative; populate private inventory choices through
+your own configuration, never through migration defaults. Planned records and guests
+still present in the verified census remain protected. Fresh site/cluster changes,
+unreadable authority, invalid rules, or an absent additional tag prevent the write.
+Existing VM fields, addresses, interfaces and tags are retained; the normal Proxbox
+soft-delete marker is added for lifecycle tracking. A reappearing marked VM can
+restore its active status, but operator-selected additional tags are not removed.
 
 ### Default VM roles
 

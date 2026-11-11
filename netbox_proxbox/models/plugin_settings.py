@@ -23,7 +23,10 @@ from netbox_proxbox.constants import (
     SYNC_JOB_TIMEOUT_MAX,
     SYNC_JOB_TIMEOUT_MIN,
 )
-from netbox_proxbox.validators import validate_node_device_name_template
+from netbox_proxbox.validators import (
+    validate_node_device_name_template,
+    validate_orphan_retirement_rules,
+)
 
 DEFAULT_BACKEND_LOG_FILE_PATH = "/var/log/proxbox.log"
 
@@ -131,6 +134,20 @@ class ProxboxPluginSettings(NetBoxModel):
             "When enabled, full-update runs will delete Proxbox-discovered VMs "
             "that were not touched by the current sync run. Review a dry-run "
             "preview before enabling in production."
+        ),
+    )
+    orphan_retirement_rules = models.JSONField(
+        default=None,
+        null=True,
+        blank=True,
+        validators=[validate_orphan_retirement_rules],
+        verbose_name=_("Orphan retirement rules"),
+        help_text=_(
+            "Null preserves legacy soft-decommissioning. A list allows only the "
+            "listed site IDs; other sites are report-only. Each rule has site_id, "
+            "status (report_only, offline or decommissioning), and an optional "
+            "existing tag_id. An empty list is report-only everywhere. "
+            "Requires a backend supporting site-scoped retirement rules."
         ),
     )
     sync_mode_vm = models.CharField(
@@ -1033,9 +1050,14 @@ class ProxboxPluginSettings(NetBoxModel):
         return "Proxbox plugin settings"
 
     def clean(self) -> None:
-        """Reject timing combinations that cannot perform another status poll."""
+        """Validate retirement policy and reject unusable polling intervals."""
 
         super().clean()
+        # Django skips field validators for blank JSON values, including {}.
+        try:
+            validate_orphan_retirement_rules(self.orphan_retirement_rules)
+        except ValidationError as exc:
+            raise ValidationError({"orphan_retirement_rules": exc.messages}) from exc
         timeout = self.ceph_task_timeout
         poll_interval = self.ceph_task_poll_interval
         if timeout is None or poll_interval is None:

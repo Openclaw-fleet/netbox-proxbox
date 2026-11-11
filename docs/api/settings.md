@@ -152,7 +152,8 @@ These fields are set by the system and cannot be modified via PATCH:
 | `reconciliation_engine` | string | VM operation-queue engine used by proxbox-api: `python`, `compare`, or `rust`. Controlled by ProxboxPluginSettings, not backend environment variables. |
 | `reconciliation_compare_strict` | boolean | In `compare` mode, fail the sync on Rust/Python mismatch instead of only logging it. |
 | `custom_fields_request_delay` | decimal | Compatibility-only; not consumed by netbox-proxbox or proxbox-api (no effect on sync) |
-| `delete_orphans` | boolean | When `true`, full-update marks Proxbox-discovered QEMU VMs and LXC containers whose typed sync state has a stale or missing `last_run_id` with the `proxbox-soft-deleted` tag and `decommissioning` status. It never deletes NetBox records. |
+| `delete_orphans` | boolean | When `true`, permits soft retirement of stale Proxbox-discovered VMs, subject to the current census, planned/placement guards and retirement rules. The legacy status is `decommissioning`; NetBox records are never deleted. |
+| `orphan_retirement_rules` | array or null | `null` preserves legacy retirement. `[]` makes all sites report-only. Otherwise each rule contains a unique positive integer `site_id`, a `status` (`report_only`, `offline`, or `decommissioning`), and optionally an existing positive integer `tag_id` for writable rules. Unlisted or unidentified sites are report-only. Requires a backend supporting site-scoped retirement rules. |
 
 ### NetBox Client
 
