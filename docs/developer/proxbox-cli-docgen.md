@@ -27,17 +27,23 @@ That means the documentation can be rebuilt without depending on a live `proxbox
 
 ## Regenerate
 
-From the repository root:
+From the repository root, use the reviewed lockfile toolchain:
 
 ```bash
-python docs/generate_proxbox_cli_docs.py
+uv run --frozen --extra cli python docs/generate_proxbox_cli_docs.py
 ```
 
-Or through the installed CLI entrypoint:
+Or through the locked CLI entrypoint:
 
 ```bash
-pxb docs generate-capture
+uv run --frozen --extra cli pxb docs generate-capture
 ```
+
+The semantic freshness gate runs with the same locked dependencies. Typer can
+change help rendering between releases (for example, 0.29 adds `<bool>` labels
+to flags), so an unconstrained package install is not the canonical snapshot
+environment. Runtime dependency ranges remain unchanged. Review and regenerate
+the captures together when deliberately updating the renderer in `uv.lock`.
 
 Then rebuild the docs site:
 

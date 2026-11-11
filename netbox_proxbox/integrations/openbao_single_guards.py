@@ -409,17 +409,27 @@ def _guard_settings_save(original: Callable) -> Callable:
             if isinstance(using_value, str)
             else router.db_for_write(type(instance), instance=instance)
         )
-        if instance.pk is None:
+        with transaction.atomic(using=using):
+            singleton = (
+                type(instance)
+                .objects.using(using)
+                .select_for_update()
+                .filter(singleton_key="default")
+                .first()
+            )
             _guard_all_settings_state(
                 instance.credential_storage_backend,
                 using=using,
             )
-            return original(instance, *args, **kwargs)
-        return _locked_settings_write(
-            using,
-            [instance.credential_storage_backend],
-            lambda: original(instance, *args, **kwargs),
-        )
+            result = original(instance, *args, **kwargs)
+            if singleton is None:
+                # An explicit PK can update a row created after the empty
+                # lookup. Recheck under the save's row lock before committing.
+                _guard_all_settings_state(
+                    instance.credential_storage_backend,
+                    using=using,
+                )
+            return result
 
     return guarded
 
